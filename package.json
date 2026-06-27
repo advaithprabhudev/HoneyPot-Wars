@@ -1,0 +1,26 @@
+{
+  "name": "honeypot-wars",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w packages/shared && npm run build -w apps/api",
+    "test": "npm run test -w apps/api",
+    "lint": "eslint \"packages/*/src/**/*.ts\" \"apps/api/src/**/*.ts\"",
+    "format": "prettier --write \"packages/*/src/**/*.ts\" \"apps/api/src/**/*.ts\"",
+    "seed": "tsx apps/api/src/scripts/seed.ts"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "concurrently": "^9.0.0",
+    "eslint": "^8.57.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0",
+    "@vitest/coverage-v8": "^2.1.0"
+  }
+}
