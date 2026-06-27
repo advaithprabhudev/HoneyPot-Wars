@@ -1,0 +1,87 @@
+@import '@fontsource/press-start-2p';
+@import '@fontsource/vt323';
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #07080a;
+  color: #e8e8e8;
+  font-family: '"VT323"', monospace;
+  image-rendering: pixelated;
+}
+
+.pixelated {
+  image-rendering: pixelated;
+}
+
+/* Flat pixel sky — the one permitted gradient (CLAUDE.md §13). */
+.pixel-sky {
+  background:
+    linear-gradient(#4fa3e0, #4fa3e0) 0 0 / 100% 60% no-repeat,
+    linear-gradient(#3a89c4, #3a89c4) 0 60% / 100% 40% no-repeat;
+}
+
+@keyframes hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.anim-hop {
+  animation: hop 0.7s steps(2, end) infinite;
+}
+
+@keyframes blink {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  61%,
+  100% {
+    opacity: 0.25;
+  }
+}
+.anim-blink {
+  animation: blink 1s steps(1, end) infinite;
+}
+
+@keyframes stamp {
+  0% {
+    transform: scale(2.4) rotate(-12deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(0.9) rotate(-12deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(-12deg);
+    opacity: 1;
+  }
+}
+.anim-stamp {
+  animation: stamp 0.35s steps(4, end) 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-hop,
+  .anim-blink,
+  .anim-stamp {
+    animation: none;
+  }
+}
