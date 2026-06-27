@@ -56,12 +56,8 @@ async function runScanPipeline(
     }
 
     // Patch the job with the real repo name now that we know it
-    const existing = store.getJob(scanId)
-    if (existing) {
-      store.createJob(scanId, repoName)
-      store.updateStatus(scanId, 'scanning')
-      if (existing.totalFiles > 0) store.setTotalFiles(scanId, existing.totalFiles)
-    }
+    store.updateRepoName(scanId, repoName)
+    store.updateStatus(scanId, 'scanning')
 
     // ── 3. List scannable files ───────────────────────────────────────────────
     const allFiles = await listScanableFiles(extractedDir)

@@ -47,6 +47,12 @@ export function updateStatus(scanId: string, status: ScanStatus): void {
   jobs.set(scanId, { ...job, status })
 }
 
+export function updateRepoName(scanId: string, repoName: string): void {
+  const job = jobs.get(scanId)
+  if (!job) return
+  jobs.set(scanId, { ...job, repoName })
+}
+
 export function setTotalFiles(scanId: string, totalFiles: number): void {
   const job = jobs.get(scanId)
   if (!job) return

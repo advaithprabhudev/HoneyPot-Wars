@@ -17,11 +17,12 @@ export const paramsSchema = z
   .strict()
 
 // VulnFinding schema — the §A safety boundary.
-// location.file is a path string only; params must all be numeric 0..1.
+// params uses paramsSchema so only the 16 canonical PARAM_KEYS are accepted (no extra fields).
+// SAFETY REGRESSION — CLAUDE.md §A.4: do not replace paramsSchema with z.record().
 export const vulnFindingSchema = z
   .object({
     category:        vulnCategorySchema,
-    params:          z.record(z.string(), z.number().min(0).max(1)),
+    params:          paramsSchema,
     fingerprintHash: z.string().length(64),
     location: z.object({
       file: z.string().max(300),
@@ -54,14 +55,14 @@ export const refereeOutputSchema = z.object({
 })
 
 export const arenaStartSchema = z.object({
-  engine: z.enum(['local', 'llm_claude']),
+  engine: z.enum(['local', 'llm_openai']),
   seed:   z.number().int().optional(),
 })
 
 export const roundResultSchema = z.object({
   id:         z.string(),
   seed:       z.number().int(),
-  engine:     z.enum(['local', 'llm_claude']),
+  engine:     z.enum(['local', 'llm_openai']),
   finding:    vulnFindingSchema,
   verdicts:   z.array(
     agentVerdictOutputSchema.extend({ agent: z.string(), flagged: z.boolean() }),

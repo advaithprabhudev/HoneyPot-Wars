@@ -29,7 +29,7 @@ export type SocketEventName = SocketEvents[keyof SocketEvents]
 // ── Event payload types ──────────────────────────────────────────────────────
 
 export type ArenaStartPayload = {
-  engine: 'local' | 'llm_claude'
+  engine: 'local' | 'llm_openai'
   seed?: number
 }
 

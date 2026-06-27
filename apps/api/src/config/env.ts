@@ -9,13 +9,10 @@ const envSchema = z.object({
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
 
   // Arena behaviour
-  ARENA_ENGINE: z.enum(['local', 'llm_claude']).default('local'),
+  ARENA_ENGINE: z.enum(['local', 'llm_openai']).default('local'),
   ARENA_MODE: z.enum(['ondemand', 'continuous']).default('ondemand'),
 
-  // Required only when ARENA_ENGINE=llm_claude; validated lazily in lib/anthropic.ts
-  ANTHROPIC_API_KEY: z.string().optional(),
-
-  // Real scan agent — required when /api/scan/* is used; validated lazily in lib/openai.ts
+  // Required when ARENA_ENGINE=llm_openai or /api/scan/* is used; validated lazily in lib/openai.ts
   OPENAI_API_KEY: z.string().optional(),
 
   // Temp directory for repo extraction (defaults to os.tmpdir())

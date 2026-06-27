@@ -1,15 +1,15 @@
 /**
- * Claude LLM engine — uses the Anthropic SDK.
- * Engine discriminant: 'llm_claude'
+ * OpenAI LLM engine.
+ * Engine discriminant: 'llm_openai'
  *
  * Pipeline: scanner → [secrets, injection, config, dependency] → fuse → referee
- * Model assignment (CLAUDE.md §G):
- *   Scanner  : claude-sonnet-4-6   (structured param generation within taxonomy bounds)
- *   4 Defenders: claude-haiku-4-5  (fast, parallel, high-volume scoring)
- *   Referee  : claude-sonnet-4-6   (novelty + fusion judgement)
+ * Model assignment:
+ *   Scanner    : gpt-4o       (structured param generation within taxonomy bounds)
+ *   4 Defenders: gpt-4o-mini  (fast, parallel, high-volume scoring)
+ *   Referee    : gpt-4o       (novelty + fusion judgement)
  */
 
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import {
   VULN_CATEGORIES,
   AGENT_PARAMS,
@@ -19,7 +19,7 @@ import {
 } from '@honeypot-wars/shared'
 import type { VulnFinding, AgentVerdict, AgentName, VulnCategory, RoundResult } from '@honeypot-wars/shared'
 import { CATCH_THRESHOLD, CATEGORY_LABELS, AGENT_LABELS } from '@honeypot-wars/shared'
-import { getAnthropicClient } from '../../lib/anthropic.js'
+import { getOpenAIClient } from '../../lib/openai.js'
 import { MAX_GENERATE_ATTEMPTS } from '../../config/weights.js'
 import { mulberry32 } from '../../lib/rng.js'
 import { fingerprintHash } from '../hash.js'
@@ -29,9 +29,9 @@ import type { RoundEngine, ScorerAgent, RoundContext } from '../types.js'
 
 // ── Models ───────────────────────────────────────────────────────────────────
 
-const SCANNER_MODEL  = 'claude-sonnet-4-6'
-const DEFENDER_MODEL = 'claude-haiku-4-5'
-const REFEREE_MODEL  = 'claude-sonnet-4-6'
+const SCANNER_MODEL  = 'gpt-4o'
+const DEFENDER_MODEL = 'gpt-4o-mini'
+const REFEREE_MODEL  = 'gpt-4o'
 
 // ── Prompt builders ──────────────────────────────────────────────────────────
 
@@ -76,42 +76,44 @@ function refereeUserPrompt(fusedScore: number, verdicts: AgentVerdict[]): string
   return `fusedScore=${fusedScore.toFixed(4)} | ${summary}`
 }
 
-// ── Anthropic call helper ────────────────────────────────────────────────────
+// ── OpenAI call helper ───────────────────────────────────────────────────────
 
-async function callClaude(
-  client: Anthropic,
+async function callOpenAI(
+  client: OpenAI,
   model: string,
   system: string,
   user: string,
 ): Promise<string> {
-  const message = await client.messages.create({
+  const completion = await client.chat.completions.create({
     model,
     max_tokens: 512,
-    system,
-    messages: [{ role: 'user', content: user }],
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user',   content: user },
+    ],
   })
-  const block = message.content[0]
-  if (!block || block.type !== 'text') {
-    throw new Error('claude: unexpected or empty content block')
+  const text = completion.choices[0]?.message?.content
+  if (!text) {
+    throw new Error('openai: empty or missing content in response')
   }
-  return block.text
+  return text
 }
 
 function extractJSON(raw: string): unknown {
   const match = raw.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error(`claude: no JSON object in response: ${raw.slice(0, 120)}`)
+  if (!match) throw new Error(`openai: no JSON object in response: ${raw.slice(0, 120)}`)
   return JSON.parse(match[0])
 }
 
 // ── Scanner ──────────────────────────────────────────────────────────────────
 
 async function runScanner(
-  client: Anthropic,
+  client: OpenAI,
   category: VulnCategory,
   seedParams: Record<string, number>,
 ): Promise<VulnFinding> {
   for (let attempt = 1; attempt <= MAX_GENERATE_ATTEMPTS; attempt++) {
-    const raw = await callClaude(client, SCANNER_MODEL, scannerSystemPrompt(category), 'Generate.')
+    const raw = await callOpenAI(client, SCANNER_MODEL, scannerSystemPrompt(category), 'Generate.')
     try {
       const parsed = extractJSON(raw) as Record<string, unknown>
       const finding: VulnFinding = {
@@ -124,16 +126,16 @@ async function runScanner(
       return vulnFindingSchema.parse(finding)
     } catch {
       if (attempt === MAX_GENERATE_ATTEMPTS) {
-        throw new Error(`claude scanner: ${MAX_GENERATE_ATTEMPTS} attempts exhausted for ${category}`)
+        throw new Error(`openai scanner: ${MAX_GENERATE_ATTEMPTS} attempts exhausted for ${category}`)
       }
     }
   }
-  throw new Error('claude scanner: unreachable')
+  throw new Error('openai scanner: unreachable')
 }
 
 // ── Scoring agents ───────────────────────────────────────────────────────────
 
-function createDefenderAgent(client: Anthropic, agentName: AgentName): ScorerAgent {
+function createDefenderAgent(client: OpenAI, agentName: AgentName): ScorerAgent {
   return {
     name: agentName,
     async score(finding: VulnFinding, _ctx: RoundContext): Promise<AgentVerdict> {
@@ -144,7 +146,7 @@ function createDefenderAgent(client: Anthropic, agentName: AgentName): ScorerAge
       }
 
       try {
-        const raw = await callClaude(
+        const raw = await callOpenAI(
           client,
           DEFENDER_MODEL,
           agentSystemPrompt(agentName),
@@ -172,14 +174,14 @@ function createDefenderAgent(client: Anthropic, agentName: AgentName): ScorerAge
 // ── Referee ──────────────────────────────────────────────────────────────────
 
 async function runReferee(
-  client: Anthropic,
+  client: OpenAI,
   fusedScore: number,
   verdicts: AgentVerdict[],
   finding: VulnFinding,
   isNovel: boolean,
 ): Promise<{ verdict: 'caught' | 'slipped'; reason: string }> {
   try {
-    const raw = await callClaude(
+    const raw = await callOpenAI(
       client,
       REFEREE_MODEL,
       refereeSystemPrompt(),
@@ -201,10 +203,10 @@ async function runReferee(
 
 // ── Engine factory ───────────────────────────────────────────────────────────
 
-export function createClaudeEngine(
+export function createOpenAIEngine(
   isHashSeen: (hash: string) => boolean,
 ): RoundEngine {
-  const client = getAnthropicClient()
+  const client = getOpenAIClient()
 
   const defenders: ScorerAgent[] = [
     createDefenderAgent(client, 'secrets'),
@@ -261,7 +263,7 @@ export function createClaudeEngine(
       return {
         id:        `${seed}-${finding.fingerprintHash.slice(0, 8)}`,
         seed,
-        engine:    'llm_claude',
+        engine:    'llm_openai',
         finding,
         verdicts,
         fusedScore,

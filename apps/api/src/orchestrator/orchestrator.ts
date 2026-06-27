@@ -3,9 +3,9 @@ import { createLocalEngine } from './engines/local.js'
 import type { RoundEngine } from './types.js'
 
 export type OrchestratorOptions = {
-  engine: 'local' | 'llm_claude'
+  engine: 'local' | 'llm_openai'
   isHashSeen: (hash: string) => boolean
-  getClaudeEngine?: () => RoundEngine
+  getOpenAIEngine?: () => RoundEngine
 }
 
 /**
@@ -13,11 +13,11 @@ export type OrchestratorOptions = {
  * Keeps engine selection in one place — callers just call runRound().
  */
 export function createOrchestrator(opts: OrchestratorOptions): RoundEngine {
-  if (opts.engine === 'llm_claude') {
-    if (!opts.getClaudeEngine) {
-      throw new Error('getClaudeEngine factory required for llm_claude engine')
+  if (opts.engine === 'llm_openai') {
+    if (!opts.getOpenAIEngine) {
+      throw new Error('getOpenAIEngine factory required for llm_openai engine')
     }
-    return opts.getClaudeEngine()
+    return opts.getOpenAIEngine()
   }
 
   return createLocalEngine(opts.isHashSeen)

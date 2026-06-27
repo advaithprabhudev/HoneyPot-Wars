@@ -2,7 +2,7 @@ import type { AgentName, VulnCategory } from './taxonomy.js'
 
 export type Severity = 'critical' | 'high' | 'medium' | 'low'
 export type Verdict = 'caught' | 'slipped'
-export type Engine = 'local' | 'llm_claude'
+export type Engine = 'local' | 'llm_openai'
 
 // ── Real scan types (OpenAI-powered live analysis) ───────────────────────────
 

@@ -3,7 +3,7 @@ import type { ServerToClientEvents, ClientToServerEvents, FeedLine, ArenaMetric 
 import { SOCKET_EVENTS, arenaStartSchema } from '@honeypot-wars/shared'
 import { env } from '../config/env.js'
 import { createOrchestrator, runRound } from '../orchestrator/orchestrator.js'
-import { createClaudeEngine } from '../orchestrator/engines/openai.js'
+import { createOpenAIEngine } from '../orchestrator/engines/openai.js'
 import { createLocalDetector, createLlmDetector } from '../orchestrator/detector/index.js'
 import type { DetectorAgent } from '../orchestrator/detector/index.js'
 import type { RoundEngine } from '../orchestrator/types.js'
@@ -11,7 +11,7 @@ import type { RoundEngine } from '../orchestrator/types.js'
 // Delay between rounds in milliseconds.
 // Local engine is instant; LLM engine needs breathing room for API calls.
 const ROUND_INTERVAL_LOCAL = 500
-const ROUND_INTERVAL_LLM   = 0
+const ROUND_INTERVAL_LLM   = 2000
 
 type ArenaState = {
   running:     boolean
@@ -67,6 +67,9 @@ export function registerArenaHandlers(socket: ArenaSocket): void {
       const seed  = state.nextSeed++
       const round = await runRound(state.engine, { seed })
 
+      // Record hash so subsequent rounds with the same fingerprint are non-novel
+      state.seenHashes.add(round.finding.fingerprintHash)
+
       // Per-connection novelty metric tracking
       if (round.isNovel) {
         state.novelTotal++
@@ -109,24 +112,32 @@ export function registerArenaHandlers(socket: ArenaSocket): void {
     const { engine: engineName, seed: startSeed } = parsed.data
     const seenHashes = new Set<string>()
 
-    const engine: RoundEngine =
-      engineName === 'llm_claude'
-        ? createOrchestrator({
-            engine:          'llm_claude',
-            isHashSeen:      (h) => seenHashes.has(h),
-            getClaudeEngine: () => createClaudeEngine((h) => seenHashes.has(h)),
-          })
-        : createOrchestrator({
-            engine:     'local',
-            isHashSeen: (h) => seenHashes.has(h),
-          })
+    let engine: RoundEngine
+    let detector: DetectorAgent
+    try {
+      engine =
+        engineName === 'llm_openai'
+          ? createOrchestrator({
+              engine:          'llm_openai',
+              isHashSeen:      (h) => seenHashes.has(h),
+              getOpenAIEngine: () => createOpenAIEngine((h) => seenHashes.has(h)),
+            })
+          : createOrchestrator({
+              engine:     'local',
+              isHashSeen: (h) => seenHashes.has(h),
+            })
 
-    const useAnthropicDetector =
-      engineName === 'llm_claude' && Boolean(env.ANTHROPIC_API_KEY)
+      const useOpenAIDetector =
+        engineName === 'llm_openai' && Boolean(env.OPENAI_API_KEY)
 
-    const detector: DetectorAgent = useAnthropicDetector
-      ? createLlmDetector()
-      : createLocalDetector()
+      detector = useOpenAIDetector
+        ? createLlmDetector()
+        : createLocalDetector()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'arena engine initialisation failed'
+      socket.emit(SOCKET_EVENTS.SCAN_ERROR, { scanId: 'arena', error: msg })
+      return
+    }
 
     state = {
       running:     true,
@@ -138,7 +149,7 @@ export function registerArenaHandlers(socket: ArenaSocket): void {
       totalRounds: 0,
       novelSlips:  0,
       nextSeed:    startSeed ?? Math.floor(Math.random() * 1_000_000),
-      intervalMs:  engineName === 'llm_claude' ? ROUND_INTERVAL_LLM : ROUND_INTERVAL_LOCAL,
+      intervalMs:  engineName === 'llm_openai' ? ROUND_INTERVAL_LLM : ROUND_INTERVAL_LOCAL,
     }
 
     void runOneRound()

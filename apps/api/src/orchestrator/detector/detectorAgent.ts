@@ -4,23 +4,23 @@
  *
  * Two implementations:
  *   local  — pure deterministic pattern matching, no network
- *   llm    — claude-haiku-4-5 behavioral analysis with local fallback
+ *   llm    — gpt-4o-mini behavioral analysis with local fallback
  *
  * All data passed to the LLM is abstract stats (counts, rates, scores).
  * No raw source code, credentials, or exploit strings ever cross this boundary (§A).
  */
 
-import type Anthropic from '@anthropic-ai/sdk'
+import type OpenAI from 'openai'
 import type { RoundResult, DetectorAlert } from '@honeypot-wars/shared'
 import { detectorAlertSchema } from '@honeypot-wars/shared'
 import { CATCH_THRESHOLD } from '@honeypot-wars/shared'
-import { getAnthropicClient } from '../../lib/anthropic.js'
+import { getOpenAIClient } from '../../lib/openai.js'
 import { snapshotFromRound, appendSnapshot, computeStats } from './window.js'
 import { runLocalPatterns } from './patterns.js'
 import type { RoundSnapshot } from './types.js'
 import { MIN_WINDOW } from './types.js'
 
-const DETECTOR_MODEL = 'claude-haiku-4-5'
+const DETECTOR_MODEL = 'gpt-4o-mini'
 
 export interface DetectorAgent {
   observe(round: RoundResult): Promise<readonly DetectorAlert[]>
@@ -67,20 +67,22 @@ type LlmPatternItem = {
 }
 
 async function callLlmDetector(
-  client: Anthropic,
+  client: OpenAI,
   stats: ReturnType<typeof computeStats>,
 ): Promise<readonly DetectorAlert[]> {
-  const message = await client.messages.create({
+  const completion = await client.chat.completions.create({
     model:      DETECTOR_MODEL,
     max_tokens: 512,
-    system:     DETECTOR_SYSTEM,
-    messages:   [{ role: 'user', content: buildDetectorContext(stats) }],
+    messages: [
+      { role: 'system', content: DETECTOR_SYSTEM },
+      { role: 'user',   content: buildDetectorContext(stats) },
+    ],
   })
 
-  const block = message.content[0]
-  if (!block || block.type !== 'text') return []
+  const text = completion.choices[0]?.message?.content
+  if (!text) return []
 
-  const raw = block.text.match(/\[[\s\S]*\]/)
+  const raw = text.match(/\[[\s\S]*\]/)
   if (!raw) return []
 
   const items = JSON.parse(raw[0]) as LlmPatternItem[]
@@ -119,7 +121,7 @@ export function createLocalDetector(): DetectorAgent {
 }
 
 export function createLlmDetector(): DetectorAgent {
-  const client = getAnthropicClient()
+  const client = getOpenAIClient()
   let snapshots: readonly RoundSnapshot[] = []
 
   return {
